@@ -1,0 +1,9 @@
+[submodule "mesa_va/subprojects/mesa"]
+	path = mesa_va/subprojects/mesa
+	url = https://gitlab.freedesktop.org/mesa/mesa.git
+[submodule "mesa_va/subprojects/libva"]
+	path = mesa_va/subprojects/libva
+	url = https://github.com/intel/libva.git
+[submodule "mesa_va/subprojects/drm"]
+	path = mesa_va/subprojects/drm
+	url = https://gitlab.freedesktop.org/mesa/drm.git

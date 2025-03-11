@@ -167,19 +167,18 @@ commonPackages = [
 
 # Debian packages
 coreDebianPackages = [
-    'libva-amdgpu-dev',
     'rocm-hip-runtime-dev'
 ]
 coreDebianU22Packages = [
     'libstdc++-12-dev'
 ]
 runtimeDebianPackages = [
-    'libva2-amdgpu',
-    'libva-amdgpu-drm2',
-    'libva-amdgpu-wayland2',
-    'libva-amdgpu-x11-2',
-    'mesa-amdgpu-va-drivers',
-    'vainfo'
+    # 'libva2-amdgpu',
+    # 'libva-amdgpu-drm2',
+    # 'libva-amdgpu-wayland2',
+    # 'libva-amdgpu-x11-2',
+    # 'mesa-amdgpu-va-drivers',
+    # 'vainfo'
 ]
 ffmpegDebianPackages = [
     'libavcodec-dev',
@@ -189,13 +188,12 @@ ffmpegDebianPackages = [
 
 # RPM Packages
 coreRPMPackages = [
-    'libva-amdgpu-devel',
     'rocm-hip-runtime-devel'
 ]
 runtimeRPMPackages = [
-    'libva-amdgpu',
-    'mesa-amdgpu-va-drivers',
-    'libva-utils'
+    # 'libva-amdgpu',
+    # 'mesa-amdgpu-va-drivers',
+    # 'libva-utils'
 ]
 
 # update
