@@ -106,14 +106,13 @@ option(ROCDECODE_ENABLE_ROCPROFILER_REGISTER "Enable rocprofiler-register suppor
 include(ExternalProject)
 ExternalProject_Add(mesa SOURCE_DIR ${CMAKE_SOURCE_DIR}/mesa_va 
   CONFIGURE_COMMAND
-    meson setup --prefix=<INSTALL_DIR> <BINARY_DIR> <SOURCE_DIR>
+    meson setup --prefix=<INSTALL_DIR> --libdir=lib --buildtype=debug <BINARY_DIR> <SOURCE_DIR>
   BUILD_COMMAND
     ninja -C <BINARY_DIR>
   INSTALL_COMMAND
     ninja -C <BINARY_DIR> install
 )
 ExternalProject_Get_Property(mesa INSTALL_DIR)
-install(DIRECTORY ${INSTALL_DIR} DESTINATION ${ROCM_PATH} USE_SOURCE_PERMISSIONS)
 
 
 find_package(HIP QUIET)
@@ -151,9 +150,11 @@ if(HIP_FOUND)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=gnu++17")
   target_link_libraries(${PROJECT_NAME} ${LINK_LIBRARY_LIST})
 
-  target_link_libraries(${PROJECT_NAME} ${INSTALL_DIR}/lib/x86_64-linux-gnu/libdrm.so)
-  target_link_libraries(${PROJECT_NAME} ${INSTALL_DIR}/lib/x86_64-linux-gnu/libva.so)
-  target_link_libraries(${PROJECT_NAME} ${INSTALL_DIR}/lib/x86_64-linux-gnu/libva-drm.so)
+  target_link_libraries(${PROJECT_NAME} ${INSTALL_DIR}/lib/libdrm.so)
+  target_link_libraries(${PROJECT_NAME} ${INSTALL_DIR}/lib/libdrm_amdgpu.so)
+
+  target_link_libraries(${PROJECT_NAME} "$<LINK_LIBRARY:WHOLE_ARCHIVE,${INSTALL_DIR}/lib/dri/libva_mesa.a>")
+  target_link_libraries(${PROJECT_NAME} ${INSTALL_DIR}/lib/dri/libgallium_drv_video.a)
 
 
   set_target_properties(${PROJECT_NAME} PROPERTIES POSITION_INDEPENDENT_CODE ON)
@@ -171,6 +172,8 @@ if(HIP_FOUND)
       ROCDECODE_ROCP_REG_VERSION_MINOR=${VERSION_MINOR}
       ROCDECODE_ROCP_REG_VERSION_PATCH=${VERSION_PATCH})
   endif()
+
+  install(DIRECTORY ${INSTALL_DIR}/ DESTINATION ${ROCM_PATH} USE_SOURCE_PERMISSIONS)
 
   # install rocDecode libs -- {ROCM_PATH}/lib
   install(TARGETS ${PROJECT_NAME} LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT runtime NAMELINK_SKIP)
