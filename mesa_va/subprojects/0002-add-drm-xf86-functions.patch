@@ -1,0 +1,424 @@
+From ea4f51cb411d2398cb169e998be24d5aca6db027 Mon Sep 17 00:00:00 2001
+From: Thong Thai <thong.thai@amd.com>
+Date: Fri, 14 Mar 2025 19:14:29 +0000
+Subject: [PATCH 2/2] add drm xf86 functions
+
+---
+ src/gallium/targets/va/mesa_va.c | 387 +++++++++++++++++++++++++++++--
+ 1 file changed, 372 insertions(+), 15 deletions(-)
+
+diff --git a/src/gallium/targets/va/mesa_va.c b/src/gallium/targets/va/mesa_va.c
+index 2ba9bbf01d1..4bca8654539 100644
+--- a/src/gallium/targets/va/mesa_va.c
++++ b/src/gallium/targets/va/mesa_va.c
+@@ -30,6 +30,8 @@
+ //  #include "va_backend.h"
+ //  #include "va_backend_prot.h"
+ //  #include "va_backend_vpp.h"
++
++#include <drm/drm.h>
+  
+ #include <va/va.h>
+ #include <va/va_backend.h>
+@@ -37,8 +39,14 @@
+ #include <va/va_backend_vpp.h>
+ // #include "va_trace.h"
+ 
++#include <va/va_drmcommon.h>
++
+ // #include <va/va_trace.h>
+ #include "va_internal.h"
++#include <sys/stat.h>
++#include <errno.h>
++#include <sys/ioctl.h>
++
+ 
+  #include <assert.h>
+  #include <stdarg.h>
+@@ -2299,18 +2307,367 @@
+      VABufferID data
+  )
+  {
+-     VADriverContextP ctx;
+-     VAStatus status;
+- 
+-     VA_PROT_INIT_CONTEXT(ctx, dpy);
+-     VA_PROT_INVOKE(
+-         ctx,
+-         ProtectedSessionExecute,
+-         (ctx, protected_session, data)
+-     );
+-     
+- 
+-     return status;
+- }
+- 
+- 
+\ No newline at end of file
++    VADriverContextP ctx;
++    VAStatus status;
++
++    VA_PROT_INIT_CONTEXT(ctx, dpy);
++    VA_PROT_INVOKE(
++        ctx,
++        ProtectedSessionExecute,
++        (ctx, protected_session, data)
++    );
++    
++
++    return status;
++}
++
++#define memclear(s) memset(&s, 0, sizeof(s))
++
++static int
++drmIoctl(int fd, unsigned long request, void *arg)
++{
++    int ret;
++
++    do {
++        ret = ioctl(fd, request, arg);
++    } while (ret == -1 && (errno == EINTR || errno == EAGAIN));
++    return ret;
++}
++
++static int drmGetMagic(int fd, drm_magic_t * magic)
++{
++    drm_auth_t auth;
++
++    memclear(auth);
++
++    *magic = 0;
++    if (drmIoctl(fd, DRM_IOCTL_GET_MAGIC, &auth))
++        return -errno;
++    *magic = auth.magic;
++    return 0;
++}
++
++static int drmAuthMagic(int fd, drm_magic_t magic)
++{
++    drm_auth_t auth;
++
++    memclear(auth);
++    auth.magic = magic;
++    if (drmIoctl(fd, DRM_IOCTL_AUTH_MAGIC, &auth))
++        return -errno;
++    return 0;
++}
++
++
++static bool
++va_drm_authenticate(int fd, uint32_t magic)
++{
++    /* Default: root + master privs are needed for the following call */
++    return drmAuthMagic(fd, magic) == 0;
++}
++
++static VAStatus va_DisplayContextConnect(VADisplayContextP pDisplayContext)
++{
++    VADriverContextP const ctx = pDisplayContext->pDriverContext;
++    struct drm_state * const drm_state = ctx->drm_state;
++    drm_magic_t magic;
++    int ret;
++
++    /* Authentication is only needed for a legacy DRM device */
++    if (ctx->display_type != VA_DISPLAY_DRM_RENDERNODES) {
++        ret = drmGetMagic(drm_state->fd, &magic);
++        if (ret < 0)
++            return VA_STATUS_ERROR_OPERATION_FAILED;
++
++        if (!va_drm_authenticate(drm_state->fd, magic))
++            return VA_STATUS_ERROR_OPERATION_FAILED;
++    }
++
++    drm_state->auth_type = VA_DRM_AUTH_CUSTOM;
++    return VA_STATUS_SUCCESS;
++}
++
++
++static void
++va_DisplayContextDestroy(VADisplayContextP pDisplayContext)
++{
++    if (!pDisplayContext)
++        return;
++
++    free(pDisplayContext->pDriverContext->drm_state);
++    free(pDisplayContext->pDriverContext);
++    free(pDisplayContext);
++}
++
++typedef struct _drmVersion {
++    int     version_major;        /**< Major version */
++    int     version_minor;        /**< Minor version */
++    int     version_patchlevel;   /**< Patch level */
++    int     name_len; 	          /**< Length of name buffer */
++    char    *name;	          /**< Name of driver */
++    int     date_len;             /**< Length of date buffer */
++    char    *date;                /**< User-space buffer to hold date */
++    int     desc_len;	          /**< Length of desc buffer */
++    char    *desc;                /**< User-space buffer to hold desc */
++} drmVersion, *drmVersionPtr;
++
++static void drmCopyVersion(drmVersionPtr d, const drm_version_t *s)
++{
++    d->version_major      = s->version_major;
++    d->version_minor      = s->version_minor;
++    d->version_patchlevel = s->version_patchlevel;
++    d->name_len           = s->name_len;
++    d->name               = strdup(s->name);
++    d->date_len           = s->date_len;
++    d->date               = strdup(s->date);
++    d->desc_len           = s->desc_len;
++    d->desc               = strdup(s->desc);
++}
++
++
++
++static drmVersionPtr drmGetVersion(int fd)
++{
++    drmVersionPtr retval;
++    drm_version_t *version = calloc(1, sizeof(*version));
++
++    if (drmIoctl(fd, DRM_IOCTL_VERSION, version)) {
++        free(version);
++        return NULL;
++    }
++
++    if (version->name_len)
++        version->name    = calloc(1, version->name_len + 1);
++    if (version->date_len)
++        version->date    = calloc(1, version->date_len + 1);
++    if (version->desc_len)
++        version->desc    = calloc(1, version->desc_len + 1);
++
++    /* The results might not be null-terminated strings, so terminate them. */
++    if (version->name_len) version->name[version->name_len] = '\0';
++    if (version->date_len) version->date[version->date_len] = '\0';
++    if (version->desc_len) version->desc[version->desc_len] = '\0';
++
++    retval = calloc(1, sizeof(*retval));
++    drmCopyVersion(retval, version);
++    free(version);
++    return retval;
++}
++
++
++static char *
++va_DRM_GetDrmDriverName(int fd)
++{
++    drmVersionPtr drm_version = drmGetVersion(fd);
++    char *driver_name;
++
++    if (!drm_version)
++        return NULL;
++
++    driver_name = strdup(drm_version->name);
++    free(drm_version);
++
++    return driver_name;
++}
++
++
++static VAStatus
++VA_DRM_GetDriverNames(VADriverContextP ctx, char **drivers, unsigned *num_drivers)
++{
++#define MAX_NAMES 2 // Adjust if needed
++
++    static const struct {
++        const char * const drm_driver;
++        const char * const va_driver[MAX_NAMES];
++    } map[] = {
++        { "xe",         { "iHD"              } },
++        { "i915",       { "iHD", "i965"      } }, // Intel Media and OTC GenX
++        { "pvrsrvkm",   { "pvr"              } }, // Intel UMG PVR
++        { "radeon",     { "r600", "radeonsi" } }, // Mesa Gallium
++        { "amdgpu",     { "radeonsi"         } }, // Mesa Gallium
++        { "WSL",        { "d3d12"            } }, // Mesa Gallium
++        { "nvidia-drm", { "nvidia"           } }, // Unofficial NVIDIA
++    };
++
++    const struct drm_state * const drm_state = ctx->drm_state;
++    char *drm_driver;
++    unsigned count = 0;
++
++    if (!drm_state || drm_state->fd < 0)
++        return VA_STATUS_ERROR_INVALID_DISPLAY;
++
++    drm_driver = va_DRM_GetDrmDriverName(drm_state->fd);
++    if (!drm_driver)
++        return VA_STATUS_ERROR_UNKNOWN;
++
++
++    for (unsigned i = 0; i < ARRAY_SIZE(map); i++) {
++        if (strcmp(map[i].drm_driver, drm_driver) == 0) {
++            const char * const *va_drivers = map[i].va_driver;
++            for (; count < MAX_NAMES && va_drivers[count] && count < *num_drivers; count++)
++                drivers[count] = strdup(va_drivers[count]);
++
++            break;
++        }
++    }
++
++    /* Fallback to the drm driver, if there's no va equivalent in the map. */
++    if (!count) {
++        drivers[count] = drm_driver;
++        count++;
++    } else {
++        free(drm_driver);
++    }
++
++    *num_drivers = count;
++
++    return VA_STATUS_SUCCESS;
++}
++
++static VAStatus
++va_DisplayContextGetDriverNames(
++    VADisplayContextP pDisplayContext,
++    char            **drivers,
++    unsigned         *num_drivers
++)
++{
++    VADriverContextP const ctx = pDisplayContext->pDriverContext;
++    VAStatus status = va_DisplayContextConnect(pDisplayContext);
++    if (status != VA_STATUS_SUCCESS)
++        return status;
++
++    return VA_DRM_GetDriverNames(ctx, drivers, num_drivers);
++}
++
++
++
++#define stat_t struct stat
++
++#include <sys/sysmacros.h>
++static bool drmNodeIsDRM(int maj, int min)
++{
++    char path[64];
++    struct stat sbuf;
++
++    snprintf(path, sizeof(path), "/sys/dev/char/%d:%d/device/drm",
++             maj, min);
++    return stat(path, &sbuf) == 0;
++}
++#define MIN2( A, B )   ( (A)<(B) ? (A) : (B) )
++#define MAX2( A, B )   ( (A)>(B) ? (A) : (B) )
++#define MAX3( A, B, C ) ((A) > (B) ? MAX2(A, C) : MAX2(B, C))
++
++#define DRM_DIR_NAME  "/dev/dri"
++#define DRM_PRIMARY_MINOR_NAME  "card"
++#define DRM_CONTROL_MINOR_NAME  "controlD" /* deprecated */
++#define DRM_RENDER_MINOR_NAME   "renderD"
++#define DRM_PROC_NAME "/proc/dri/" /* For backward Linux compatibility */
++
++#define DRM_DEV_NAME          "%s/" DRM_PRIMARY_MINOR_NAME "%d"
++#define DRM_CONTROL_DEV_NAME  "%s/" DRM_CONTROL_MINOR_NAME "%d" /* deprecated */
++#define DRM_RENDER_DEV_NAME   "%s/" DRM_RENDER_MINOR_NAME  "%d"
++#define DRM_NODE_NAME_MAX \
++    (sizeof(DRM_DIR_NAME) + 1 /* slash */ \
++     + MAX3(sizeof(DRM_PRIMARY_MINOR_NAME), \
++            sizeof(DRM_CONTROL_MINOR_NAME), \
++            sizeof(DRM_RENDER_MINOR_NAME)) \
++     + sizeof("1048575") /* highest possible node number 2^MINORBITS - 1 */ \
++     + 1) /* NULL-terminator */
++#define DRM_NODE_PRIMARY 0
++#define DRM_NODE_CONTROL 1 /* deprecated: never returned */
++#define DRM_NODE_RENDER  2
++#define DRM_NODE_MAX     3
++
++static const char *drmGetDeviceName(int type)
++{
++    switch (type) {
++    case DRM_NODE_PRIMARY:
++        return DRM_DEV_NAME;
++    case DRM_NODE_RENDER:
++        return DRM_RENDER_DEV_NAME;
++    }
++    return NULL;
++}
++static int drmGetMinorType(int major, int minor)
++{
++    char path[DRM_NODE_NAME_MAX];
++    const char *dev_name;
++    int i;
++
++    for (i = DRM_NODE_PRIMARY; i < DRM_NODE_MAX; i++) {
++        dev_name = drmGetDeviceName(i);
++        if (!dev_name)
++           continue;
++        snprintf(path, sizeof(path), dev_name, DRM_DIR_NAME, minor);
++        if (!access(path, F_OK))
++           return i;
++    }
++
++    return -1;
++}
++
++static int drmGetNodeTypeFromFd(int fd)
++{
++    struct stat sbuf;
++    int maj, min, type;
++
++    if (fstat(fd, &sbuf))
++        return -1;
++
++    maj = major(sbuf.st_rdev);
++    min = minor(sbuf.st_rdev);
++
++    if (!drmNodeIsDRM(maj, min) || !S_ISCHR(sbuf.st_mode)) {
++        errno = EINVAL;
++        return -1;
++    }
++
++    type = drmGetMinorType(maj, min);
++    if (type == -1)
++        errno = ENODEV;
++    return type;
++}
++ 
++#define DRM_NODE_RENDER  2
++static VADisplay
++vaGetDisplayDRM(int fd)
++{
++    VADisplayContextP pDisplayContext = NULL;
++    VADriverContextP  pDriverContext  = NULL;
++    struct drm_state *drm_state       = NULL;
++    int node_type;
++
++    if (fd < 0 || (node_type = drmGetNodeTypeFromFd(fd)) < 0)
++        return NULL;
++
++    /* Create new entry */
++    /* XXX: handle cache? */
++    drm_state = calloc(1, sizeof(*drm_state));
++    if (!drm_state)
++        goto error;
++    drm_state->fd = fd;
++
++    pDisplayContext = va_newDisplayContext();
++    if (!pDisplayContext)
++        goto error;
++
++    pDisplayContext->vaDestroy       = va_DisplayContextDestroy;
++    pDisplayContext->vaGetDriverNames = va_DisplayContextGetDriverNames;
++
++    pDriverContext = va_newDriverContext(pDisplayContext);
++    if (!pDriverContext)
++        goto error;
++
++    pDriverContext->native_dpy   = NULL;
++    pDriverContext->display_type = node_type == DRM_NODE_RENDER ?
++                                   VA_DISPLAY_DRM_RENDERNODES : VA_DISPLAY_DRM;
++    pDriverContext->drm_state    = drm_state;
++
++    return pDisplayContext;
++
++error:
++    free(pDisplayContext);
++    free(pDriverContext);
++    free(drm_state);
++    return NULL;
++}
+-- 
+2.43.0
+
