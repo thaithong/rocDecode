@@ -18,4 +18,4 @@ mesa_proj = subproject('mesa', default_options:
   ['default_library=static', 'gallium-drivers=radeonsi', 'gallium-va=enabled',
    'gallium-vdpau=disabled', 'video-codecs=all', 'gbm=disabled', 'egl=disabled',
    'gles1=disabled', 'gles2=disabled', 'glx=disabled', 'glvnd=disabled',
-   'opengl=false', 'vulkan-drivers=[]', 'platforms=[]', 'llvm=disabled'])
+   'opengl=false', 'vulkan-drivers=[]', 'platforms=[]', 'llvm=disabled', 'xmlconfig=disabled'])
