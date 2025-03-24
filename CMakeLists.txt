@@ -103,7 +103,9 @@ message("-- ${BoldBlue}rocDecode Build Type -- ${CMAKE_BUILD_TYPE}${ColourReset}
 option(ROCDECODE_ENABLE_ROCPROFILER_REGISTER "Enable rocprofiler-register support" ON)
 
 find_package(HIP QUIET)
-find_package(Libva QUIET)
+
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(LIBVA REQUIRED libva)
 
 if(ROCDECODE_ENABLE_ROCPROFILER_REGISTER)
   find_package(rocprofiler-register QUIET
@@ -111,14 +113,12 @@ if(ROCDECODE_ENABLE_ROCPROFILER_REGISTER)
     PATHS ${ROCM_PATH})
 endif()
 
-if(HIP_FOUND AND Libva_FOUND)
+if(HIP_FOUND AND LIBVA_FOUND)
 
   # HIP
   set(LINK_LIBRARY_LIST ${LINK_LIBRARY_LIST} hip::host)
   # LibVA
-  include_directories(${LIBVA_INCLUDE_DIR})
-  set(LINK_LIBRARY_LIST ${LINK_LIBRARY_LIST} ${LIBVA_LIBRARY})
-  set(LINK_LIBRARY_LIST ${LINK_LIBRARY_LIST} ${LIBVA_DRM_LIBRARY})
+  include_directories(${LIBVA_INCLUDE_DIRS})
 
   # rocprofiler
   if (rocprofiler-register_FOUND)
@@ -127,6 +127,7 @@ if(HIP_FOUND AND Libva_FOUND)
 
   # local include files
   include_directories(api src/rocdecode src/parser src/rocdecode/vaapi)
+
   # source files
   file(GLOB_RECURSE SOURCES "./src/*.cpp")
   # rocdecode.so
@@ -134,6 +135,9 @@ if(HIP_FOUND AND Libva_FOUND)
 
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=gnu++17")
   target_link_libraries(${PROJECT_NAME} ${LINK_LIBRARY_LIST})
+
+  target_link_libraries(${PROJECT_NAME} "$<LINK_LIBRARY:WHOLE_ARCHIVE,${LIBVA_LIBRARY_DIRS}/dri/libva_mesa.a>")
+  target_link_libraries(${PROJECT_NAME} ${LIBVA_LIBRARY_DIRS}/dri/libgallium_drv_video.a)
 
   set_target_properties(${PROJECT_NAME} PROPERTIES POSITION_INDEPENDENT_CODE ON)
   set_target_properties(${PROJECT_NAME} PROPERTIES LINKER_LANGUAGE CXX)
@@ -229,9 +233,9 @@ if(HIP_FOUND AND Libva_FOUND)
   # libva 2.16 (API 1.16) is needed to use mesa-amdgpu-va-drivers, libva-amdgpu
   # (AMD build of libva 2.16) should be used if distro's libva is too old
   # Libva is 2.12 on Ubuntu 22.04 and 24.04, so we can always use libva-amdgpu
-  set(ROCDECODE_DEBIAN_RUNTIME_PACKAGE_LIST  "rocm-hip-runtime, libva2-amdgpu, libva-amdgpu-drm2, libva-amdgpu-wayland2, libva-amdgpu-x11-2, mesa-amdgpu-va-drivers")
+  set(ROCDECODE_DEBIAN_RUNTIME_PACKAGE_LIST  "rocm-hip-runtime")
   # Unfortunately RPM has a mix of versions; RHEL has "libva", SLE has "libva2"
-  set(ROCDECODE_RPM_RUNTIME_PACKAGE_LIST  "rocm-hip-runtime, (libva >= 2.16.0 or libva2 >= 2.16.0 or libva-amdgpu), mesa-amdgpu-va-drivers")
+  set(ROCDECODE_RPM_RUNTIME_PACKAGE_LIST  "rocm-hip-runtime")
   # Add rocprofiler-register dependencies
   if(ROCDECODE_ENABLE_ROCPROFILER_REGISTER)
     set(ROCDECODE_DEBIAN_RUNTIME_PACKAGE_LIST "${ROCDECODE_DEBIAN_RUNTIME_PACKAGE_LIST}, rocprofiler-register")
@@ -239,12 +243,12 @@ if(HIP_FOUND AND Libva_FOUND)
   endif()
 
   # Set the dev dependent packages
-  set(ROCDECODE_DEBIAN_DEV_PACKAGE_LIST  "rocm-hip-runtime-dev, libva-amdgpu-dev, pkg-config, libavcodec-dev, libavformat-dev, libavutil-dev")
+  set(ROCDECODE_DEBIAN_DEV_PACKAGE_LIST  "rocm-hip-runtime-dev, pkg-config, libavcodec-dev, libavformat-dev, libavutil-dev")
   if(UBUNTU_22_FOUND)
     set(ROCDECODE_DEBIAN_DEV_PACKAGE_LIST "${ROCDECODE_DEBIAN_DEV_PACKAGE_LIST}, libstdc++-12-dev")
   endif()
   # TBD - RPM packages need Fusion Packages - "libavcodec-devel, libavformat-devel, libavutil-devel"
-  set(ROCDECODE_RPM_DEV_PACKAGE_LIST  "rocm-hip-runtime-devel, libva-amdgpu-devel, pkg-config")
+  set(ROCDECODE_RPM_DEV_PACKAGE_LIST  "rocm-hip-runtime-devel, pkg-config")
   
   # '%{?dist}' breaks manual builds on debian systems due to empty Provides
   execute_process(
@@ -360,8 +364,5 @@ else()
   message("-- ${Red}AMD ROCm rocDecode -- unmet dependencies${ColourReset}")
   if(NOT HIP_FOUND)
     message(FATAL_ERROR "-- ERROR!: HIP Not Found! - please install rocm-hip-runtime-dev!")
-  endif()
-  if(NOT Libva_FOUND)
-    message(FATAL_ERROR "-- ERROR!: libva Not Found - please install libva-amdgpu-dev/libva-amdgpu-devel!")
   endif()
 endif()
