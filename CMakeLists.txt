@@ -103,9 +103,7 @@ message("-- ${BoldBlue}rocDecode Build Type -- ${CMAKE_BUILD_TYPE}${ColourReset}
 option(ROCDECODE_ENABLE_ROCPROFILER_REGISTER "Enable rocprofiler-register support" ON)
 
 find_package(HIP QUIET)
-
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(LIBVA REQUIRED libva)
+find_package(Libdrm QUIET)
 
 if(ROCDECODE_ENABLE_ROCPROFILER_REGISTER)
   find_package(rocprofiler-register QUIET
@@ -113,12 +111,13 @@ if(ROCDECODE_ENABLE_ROCPROFILER_REGISTER)
     PATHS ${ROCM_PATH})
 endif()
 
-if(HIP_FOUND AND LIBVA_FOUND)
+if(HIP_FOUND AND Libdrm_FOUND)
 
   # HIP
   set(LINK_LIBRARY_LIST ${LINK_LIBRARY_LIST} hip::host)
-  # LibVA
-  include_directories(${LIBVA_INCLUDE_DIRS})
+  # LibDRM
+  include_directories(${LIBDRM_INCLUDE_DIR})
+  set(LINK_LIBRARY_LIST ${LINK_LIBRARY_LIST} drm)
 
   # rocprofiler
   if (rocprofiler-register_FOUND)
@@ -127,6 +126,7 @@ if(HIP_FOUND AND LIBVA_FOUND)
 
   # local include files
   include_directories(api src/rocdecode src/parser src/rocdecode/vaapi)
+  include_directories(${ROCM_PATH}/include)
 
   # source files
   file(GLOB_RECURSE SOURCES "./src/*.cpp")
@@ -136,8 +136,8 @@ if(HIP_FOUND AND LIBVA_FOUND)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=gnu++17")
   target_link_libraries(${PROJECT_NAME} ${LINK_LIBRARY_LIST})
 
-  target_link_libraries(${PROJECT_NAME} "$<LINK_LIBRARY:WHOLE_ARCHIVE,${LIBVA_LIBRARY_DIRS}/dri/libva_mesa.a>")
-  target_link_libraries(${PROJECT_NAME} ${LIBVA_LIBRARY_DIRS}/dri/libgallium_drv_video.a)
+  target_link_libraries(${PROJECT_NAME} "$<LINK_LIBRARY:WHOLE_ARCHIVE,${ROCM_PATH}/lib/dri/libva_mesa.a>")
+  target_link_libraries(${PROJECT_NAME} ${ROCM_PATH}/lib/dri/libgallium_drv_video.a)
 
   set_target_properties(${PROJECT_NAME} PROPERTIES POSITION_INDEPENDENT_CODE ON)
   set_target_properties(${PROJECT_NAME} PROPERTIES LINKER_LANGUAGE CXX)
