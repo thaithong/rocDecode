@@ -21,8 +21,8 @@
 #
 ################################################################################
 
-find_library(LIBDRM_LIBRARY NAMES drm HINTS /opt/rocm/lib /opt/amdgpu/lib/x86_64-linux-gnu /opt/amdgpu/lib64 /usr/lib/x86_64-linux-gnu /usr/lib64)
-find_path(LIBDRM_INCLUDE_DIR NAMES drm.h PATHS /opt/rocm/include/libdrm /opt/amdgpu/include/libdrm NO_DEFAULT_PATH)
+find_library(LIBDRM_LIBRARY NAMES drm HINTS /opt/rocm_mesa/lib /opt/amdgpu/lib/x86_64-linux-gnu /opt/amdgpu/lib64 /usr/lib/x86_64-linux-gnu /usr/lib64)
+find_path(LIBDRM_INCLUDE_DIR NAMES drm.h PATHS /opt/rocm_mesa/include/libdrm /opt/amdgpu/include/libdrm NO_DEFAULT_PATH)
 
 include(FindPackageHandleStandardArgs)
 find_package_handle_standard_args(Libdrm DEFAULT_MSG LIBDRM_INCLUDE_DIR LIBDRM_LIBRARY)

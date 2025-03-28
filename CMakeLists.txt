@@ -30,6 +30,7 @@ elseif(ROCM_PATH)
 else()
   set(ROCM_PATH /opt/rocm CACHE PATH "Default ROCm installation path")
 endif()
+set(ROCM_MESA_PATH /opt/rocm_mesa)
 # Set AMD Clang as default compiler
 if (NOT DEFINED CMAKE_CXX_COMPILER)
   set(CMAKE_C_COMPILER ${ROCM_PATH}/bin/amdclang)
@@ -126,7 +127,7 @@ if(HIP_FOUND AND Libdrm_FOUND)
 
   # local include files
   include_directories(api src/rocdecode src/parser src/rocdecode/vaapi)
-  include_directories(${ROCM_PATH}/include)
+  include_directories(${ROCM_MESA_PATH}/include)
 
   # source files
   file(GLOB_RECURSE SOURCES "./src/*.cpp")
@@ -136,8 +137,8 @@ if(HIP_FOUND AND Libdrm_FOUND)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=gnu++17")
   target_link_libraries(${PROJECT_NAME} ${LINK_LIBRARY_LIST})
 
-  target_link_libraries(${PROJECT_NAME} "$<LINK_LIBRARY:WHOLE_ARCHIVE,${ROCM_PATH}/lib/dri/libva_mesa.a>")
-  target_link_libraries(${PROJECT_NAME} ${ROCM_PATH}/lib/dri/libgallium_drv_video.a)
+  target_link_libraries(${PROJECT_NAME} "$<LINK_LIBRARY:WHOLE_ARCHIVE,${ROCM_MESA_PATH}/lib/dri/libva_mesa.a>")
+  target_link_libraries(${PROJECT_NAME} ${ROCM_MESA_PATH}/lib/dri/libgallium_drv_video.a)
 
   set_target_properties(${PROJECT_NAME} PROPERTIES POSITION_INDEPENDENT_CODE ON)
   set_target_properties(${PROJECT_NAME} PROPERTIES LINKER_LANGUAGE CXX)
