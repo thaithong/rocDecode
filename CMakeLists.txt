@@ -129,6 +129,7 @@ if(HIP_FOUND AND Libdrm_FOUND)
   include_directories(api src/rocdecode src/parser src/rocdecode/vaapi)
   include_directories(${ROCM_MESA_PATH}/include)
   link_directories(${ROCM_MESA_PATH}/lib)
+  set(CMAKE_INSTALL_RPATH ${ROCM_MESA_PATH}/lib/dri)
 
   # source files
   file(GLOB_RECURSE SOURCES "./src/*.cpp")
