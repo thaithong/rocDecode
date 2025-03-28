@@ -128,6 +128,7 @@ if(HIP_FOUND AND Libdrm_FOUND)
   # local include files
   include_directories(api src/rocdecode src/parser src/rocdecode/vaapi)
   include_directories(${ROCM_MESA_PATH}/include)
+  link_directories(${ROCM_MESA_PATH}/lib)
 
   # source files
   file(GLOB_RECURSE SOURCES "./src/*.cpp")
@@ -137,8 +138,7 @@ if(HIP_FOUND AND Libdrm_FOUND)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=gnu++17")
   target_link_libraries(${PROJECT_NAME} ${LINK_LIBRARY_LIST})
 
-  target_link_libraries(${PROJECT_NAME} "$<LINK_LIBRARY:WHOLE_ARCHIVE,${ROCM_MESA_PATH}/lib/dri/libva_mesa.a>")
-  target_link_libraries(${PROJECT_NAME} ${ROCM_MESA_PATH}/lib/dri/libgallium_drv_video.a)
+  target_link_libraries(${PROJECT_NAME} ${ROCM_MESA_PATH}/lib/dri/librocm_gallium_drv_video.so)
 
   set_target_properties(${PROJECT_NAME} PROPERTIES POSITION_INDEPENDENT_CODE ON)
   set_target_properties(${PROJECT_NAME} PROPERTIES LINKER_LANGUAGE CXX)
